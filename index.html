@@ -56,8 +56,61 @@ function quarter(v){const m=String(v||'').match(/(20\d{2})[-/]?(0[1-9]|1[0-2])?/
 function sortableDate(v){const m=String(v||'').match(/(20\d{2})[-/]?(0[1-9]|1[0-2])?/);return m?Number(m[1])*12+Number(m[2]||12):0}
 function change(current,previous,direction){const c=number(current),p=number(previous);if(c===null||p===null)return{text:t('noPrior'),className:''};const delta=c-p,positive=direction==='up'?delta>=0:delta<=0;return{text:`${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(2)} pp ${t('vsPrior')}`,className:delta===0?'':(positive?'good':'bad')}}
 function records(p){return[p?.result?.records,p?.result?.data,p?.records,p?.data].find(Array.isArray)||[]}
-async function getData(){let list=[],offset=0;for(let i=0;i<100;i++){const response=await fetch(`${API}?offset=${offset}`);if(!response.ok)throw new Error(`HKMA API request failed with status ${response.status}.`);const payload=await response.json(),batch=records(payload);list.push(...batch);const total=Number(payload?.result?.total??payload?.result?.total_records??NaN);if(!batch.length||batch.length<100||(Number.isFinite(total)&&list.length>=total))break;offset+=batch.length}const unique=new Map();list.forEach(r=>{const date=r.end_of_month||r.end_of_quarter||r.period;if(date)unique.set(date,{...r,report_date:date})});return[...unique.values()].sort((a,b)=>sortableDate(a.report_date)-sortableDate(b.report_date))}
-function drawKpis(latest,prior){const keys=['cl_gross_total','cl_net','sp_ment_loans','loans_od3m','loans_resch','loans_od3m_resch_total','cl_gross_mainland_lend'];$('#kpis').innerHTML=keys.filter(k=>latest[k]!==undefined).map(k=>{const c=change(latest[k],prior?.[k],METRICS[k].good);return`<article class="card kpi"><div class="name">${metricLabel(k)}</div><div class="value">${percentage(latest[k])}</div><div class="change ${c.className}">${c.text}</div></article>`}).join('')}
+async function getData() {
+  let list = [], offset = 0;
+
+  for (let i = 0; i < 100; i++) {
+    const response = await fetch(`${API}?offset=${offset}`);
+
+    if (!response.ok) {
+      throw new Error(
+        `HKMA API request failed with status ${response.status}.`
+      );
+    }
+
+    const payload = await response.json(),
+      batch = records(payload);
+
+    list.push(...batch);
+
+    const total = Number(
+      payload?.result?.total ??
+      payload?.result?.total_records ??
+      NaN
+    );
+
+    if (
+      !batch.length ||
+      batch.length < 100 ||
+      (Number.isFinite(total) && list.length >= total)
+    ) {
+      break;
+    }
+
+    offset += batch.length;
+  }
+
+  const unique = new Map();
+
+  list.forEach(r => {
+    const date = r.end_of_month || r.end_of_quarter || r.period;
+
+    if (date) {
+      unique.set(date, {
+        ...r,
+        report_date: date
+      });
+    }
+  });
+
+  return [...unique.values()].sort(
+    (a, b) =>
+      sortableDate(a.report_date) -
+      sortableDate(b.report_date)
+  );
+}
+  
+  function drawKpis(latest,prior){const keys=['cl_gross_total','cl_net','sp_ment_loans','loans_od3m','loans_resch','loans_od3m_resch_total','cl_gross_mainland_lend'];$('#kpis').innerHTML=keys.filter(k=>latest[k]!==undefined).map(k=>{const c=change(latest[k],prior?.[k],METRICS[k].good);return`<article class="card kpi"><div class="name">${metricLabel(k)}</div><div class="value">${percentage(latest[k])}</div><div class="change ${c.className}">${c.text}</div></article>`}).join('')}
 function drawTrend(data,key){const m=METRICS[key];$('#trendTitle').textContent=metricLabel(key);$('#trendSub').textContent=t('trendSub');if(trendChart)trendChart.destroy();trendChart=new Chart($('#trendChart'),{type:'line',data:{labels:data.map(r=>quarter(r.report_date)),datasets:[{label:metricLabel(key),data:data.map(r=>number(r[key])),borderColor:m.color,backgroundColor:m.color+'22',fill:true,tension:.25,pointRadius:2,pointHoverRadius:5,spanGaps:true}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${metricLabel(key)}: ${percentage(c.raw)}`}}},scales:{x:{grid:{display:false}},y:{ticks:{callback:v=>v+'%'}}}}})}
 function drawProfile(latest){const keys=['cl_gross_total','sp_ment_loans','cl_gross_substandard','cl_gross_doubtful','cl_gross_loss','loans_od3m','loans_resch','cl_gross_mainland_lend'].filter(k=>latest[k]!==undefined&&number(latest[k])!==null);if(profileChart)profileChart.destroy();profileChart=new Chart($('#profileChart'),{type:'bar',data:{labels:keys.map(metricLabel),datasets:[{data:keys.map(k=>number(latest[k])),backgroundColor:keys.map(k=>METRICS[k].color),borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>percentage(c.raw)}}},scales:{x:{ticks:{callback:v=>v+'%'}},y:{grid:{display:false}}}}})}
 function drawTable(data){const cols=['pass_loans','sp_ment_loans','cl_gross_total','cl_net','cl_gross_substandard','cl_gross_doubtful','cl_gross_loss','loans_od3m','loans_resch','loans_od3m_resch_total','cl_gross_mainland_lend'].filter(k=>allRows.some(r=>r[k]!==undefined));$('#dataTable').innerHTML=`<thead><tr><th>${t('quarter')}</th>${cols.map(k=>`<th>${metricLabel(k)}</th>`).join('')}</tr></thead><tbody>${[...data].reverse().map(r=>`<tr><td>${quarter(r.report_date)}</td>${cols.map(k=>`<td>${percentage(r[k])}</td>`).join('')}</tr>`).join('')}</tbody>`}
